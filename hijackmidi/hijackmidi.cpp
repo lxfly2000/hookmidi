@@ -10,8 +10,39 @@
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
+#define APP_NAME "hijackmidi"
+#define INI_FILE ".\\hijackmidi.ini"
+#define KEY_REMEMBER "remember"
+#define KEY_DEVICE_ID "deviceId"
+
+BOOL GetRemember()
+{
+	return GetPrivateProfileInt(TEXT(APP_NAME), TEXT(KEY_REMEMBER), FALSE, TEXT(INI_FILE));
+}
+
+BOOL SetRemember(BOOL b)
+{
+	TCHAR szb[2];
+	wsprintf(szb, TEXT("%d"), b);
+	return WritePrivateProfileString(TEXT(APP_NAME), TEXT(KEY_REMEMBER), szb, TEXT(INI_FILE));
+}
+
+UINT GetRememberDeviceID()
+{
+	return GetPrivateProfileInt(TEXT(APP_NAME), TEXT(KEY_DEVICE_ID), MIDI_MAPPER, TEXT(INI_FILE));
+}
+
+BOOL SetRememberDeviceID(UINT deviceId)
+{
+	TCHAR szid[12];
+	wsprintf(szid, TEXT("%d"), deviceId);
+	return WritePrivateProfileString(TEXT(APP_NAME), TEXT(KEY_DEVICE_ID), szid, TEXT(INI_FILE));
+}
+
 UINT ChooseMidiOutDevice(UINT defaultID)
 {
+	if (GetRemember())
+		return GetRememberDeviceID();
 	UINT selID = defaultID;
 	MIDIOUTCAPS moc;
 	TCHAR msg[64];
@@ -24,6 +55,7 @@ UINT ChooseMidiOutDevice(UINT defaultID)
 	tc.pszMainInstruction = TEXT("选择MIDI输出设备");
 	tc.pszMainIcon = TD_INFORMATION_ICON;
 	tc.dwFlags = TDF_USE_COMMAND_LINKS;
+	tc.pszVerificationText = TEXT("下次不再提示(&R)");
 
 	UINT midiOutCount = midiOutGetNumDevs();
 	midiOutGetDevCaps(defaultID, &moc, sizeof moc);
@@ -33,7 +65,7 @@ UINT ChooseMidiOutDevice(UINT defaultID)
 	{
 		midiOutGetDevCaps(i, &moc, sizeof moc);
 		TCHAR devdesc[60];
-		wsprintf(devdesc, TEXT("[%d]%s"), i, moc.szPname);
+		wsprintf(devdesc, TEXT("[&%d]%s"), i, moc.szPname);
 		if ((UINT)i == MIDI_MAPPER)
 			lstrcat(devdesc, TEXT("\nMIDI 映射器"));
 		if ((UINT)i == defaultID)
@@ -50,9 +82,18 @@ UINT ChooseMidiOutDevice(UINT defaultID)
 	tc.pButtons = tb.data();
 	tc.cButtons = tb.size();
 
-	TaskDialogIndirect(&tc, reinterpret_cast<int*>(&selID), NULL, NULL);
+	BOOL bRem = FALSE;
+	TaskDialogIndirect(&tc, reinterpret_cast<int*>(&selID), NULL, &bRem);
 	if (selID >= 999)
-		return selID - 1000;
+	{
+		selID -= 1000;
+		if (bRem)
+		{
+			SetRemember(TRUE);
+			SetRememberDeviceID(selID);
+		}
+		return selID;
+	}
 	return defaultID;
 }
 
