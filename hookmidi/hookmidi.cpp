@@ -95,12 +95,29 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPvI, LPWSTR param, int nShow)
 	ShellExecuteEx(&se);
 	DWORD hTargetPid = GetProcessId(se.hProcess);
 	HMODULE hdll = LoadLibrary(TEXT("hijackmidi"));
-	if (GetProcAddress(hdll, "MidiHook") == NULL)
+	HOOKPROC fMidiHook = (HOOKPROC)GetProcAddress(hdll, "MidiHook");
+	if (fMidiHook == NULL)
 		MessageBox(NULL, TEXT("没有找到 MidiHook 函数。"), NULL, MB_ICONERROR);
-	HHOOK hhkMidi = SetWindowsHookEx(WH_DEBUG, (HOOKPROC)GetProcAddress(hdll, "MidiHook"),
-		hdll, GetFirstThreadID(hTargetPid));
+	//貌似不能100%成功？
+	HHOOK hhkMidi = SetWindowsHookEx(WH_DEBUG, fMidiHook, hdll, GetFirstThreadID(hTargetPid));
+	if (hhkMidi == NULL)
+	{
+		TCHAR msg[40];
+		wsprintf(msg, TEXT("无法设置Hook：%#x"), GetLastError());
+		MessageBox(NULL, msg, NULL, MB_ICONERROR);
+	}
 	WaitForSingleObject(se.hProcess, INFINITE);
-	UnhookWindowsHookEx(hhkMidi);
+	if (!UnhookWindowsHookEx(hhkMidi))
+	{
+		TCHAR msg[40];
+		DWORD e = GetLastError();
+		if (e)
+		{
+			wsprintf(msg, TEXT("移除Hook时出错：%#x"), e);
+			MessageBox(NULL, msg, NULL, MB_ICONERROR);
+		}
+		return e;
+	}
 
 	return 0;
 }
