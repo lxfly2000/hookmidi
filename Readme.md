@@ -5,7 +5,7 @@
 Windows Vista 及以后的操作系统，32位或64位均可。需要安装 [Visual C++ 2017 运行库](https://www.visualstudio.com/zh-hans/downloads)。
 
 ## 使用方法
-`hookmidi <程序路径> <参数>`
+`hookmidi <程序路径> <参数>`  
 如果没有指定路径，程序将会弹出一个选择程序文件的对话框。
 
 ### 注意
