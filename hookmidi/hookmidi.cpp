@@ -3,6 +3,8 @@
 #include<vector>
 #include<Windows.h>
 #include<TlHelp32.h>
+#pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
+processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 DWORD GetFirstThreadID(DWORD pid)
 {
@@ -103,7 +105,7 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPvI, LPWSTR param, int nShow)
 	if (hhkMidi == NULL)
 	{
 		TCHAR msg[40];
-		wsprintf(msg, TEXT("无法设置Hook：%#x"), GetLastError());
+		wsprintf(msg, TEXT("无法设置Hook：%#x\n请尝试重新启动。"), GetLastError());
 		MessageBox(NULL, msg, NULL, MB_ICONERROR);
 	}
 	WaitForSingleObject(se.hProcess, INFINITE);
