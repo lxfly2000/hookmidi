@@ -1,14 +1,25 @@
-#ifndef WIN32
-#error 该程序目前只能在x86中编译。
-#endif
-
 #include<vector>
 #include<Windows.h>
 #include<CommCtrl.h>
+#include"include\MinHook.h"
 #pragma comment(lib,"winmm.lib")
 #pragma comment(lib,"ComCtl32.lib")
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
+#ifdef _WIN64
+#ifdef _DEBUG
+#pragma comment(lib,"lib\\libMinHook-x64-v141-mdd.lib")
+#else
+#pragma comment(lib,"lib\\libMinHook-x64-v141-md.lib")
+#endif
+#else
+#ifdef _DEBUG
+#pragma comment(lib,"lib\\libMinHook-x86-v141-mdd.lib")
+#else
+#pragma comment(lib,"lib\\libMinHook-x86-v141-md.lib")
+#endif
+#endif
 
 #define APP_NAME "hijackmidi"
 #define INI_FILE ".\\hijackmidi.ini"
@@ -80,7 +91,7 @@ UINT ChooseMidiOutDevice(UINT defaultID)
 		tb.push_back({ 1000 + i,descptr[i + 1].c_str() });
 	}
 	tc.pButtons = tb.data();
-	tc.cButtons = tb.size();
+	tc.cButtons = (UINT)tb.size();
 
 	BOOL bRem = FALSE;
 	TaskDialogIndirect(&tc, reinterpret_cast<int*>(&selID), NULL, &bRem);
@@ -97,8 +108,8 @@ UINT ChooseMidiOutDevice(UINT defaultID)
 	return defaultID;
 }
 
-void StartHijack();
-void StopHijack();
+BOOL StartHijack();
+BOOL StopHijack();
 
 MMRESULT WINAPI Redirect_midiOutOpen(LPHMIDIOUT phmo, UINT uDeviceID, DWORD_PTR dwCallback,
 	DWORD_PTR dwInstance, DWORD fdwOpen)
@@ -110,32 +121,36 @@ MMRESULT WINAPI Redirect_midiOutOpen(LPHMIDIOUT phmo, UINT uDeviceID, DWORD_PTR 
 	return uDeviceID;
 }
 
-using FUNCTYPE = decltype(midiOutOpen);
-FUNCTYPE *funcOriginal = nullptr;
-DWORD protectOriginal;
-char apientry[5];
-DWORD hTargetPid;
-HANDLE hTargetProcess;
+decltype(midiOutOpen)* funcOriginal = nullptr;
 
-void StartHijack()
+BOOL StartHijack()
 {
-	hTargetProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, hTargetPid);
-	funcOriginal = (FUNCTYPE*)GetProcAddress(LoadLibrary(TEXT("winmm.dll")), "midiOutOpen");
-	memcpy(apientry, funcOriginal, 5);
-	DWORD entryaddr = reinterpret_cast<DWORD>(Redirect_midiOutOpen) - reinterpret_cast<DWORD>(funcOriginal) - 5;
-	char asmcode[5] = { '\xe9' };//JMP
-	memcpy(asmcode + 1, &entryaddr, 4);
-	VirtualProtectEx(hTargetProcess, funcOriginal, 5, PAGE_EXECUTE_READWRITE, &protectOriginal);
-	WriteProcessMemory(hTargetProcess, funcOriginal, asmcode, 5, NULL);
-	VirtualProtectEx(hTargetProcess, funcOriginal, 5, protectOriginal, &protectOriginal);
+	if (MH_EnableHook(&midiOutOpen) != MH_OK)
+		return FALSE;
+	return TRUE;
 }
 
-void StopHijack()
+BOOL StopHijack()
 {
-	VirtualProtectEx(hTargetProcess, funcOriginal, 5, PAGE_EXECUTE_READWRITE, &protectOriginal);
-	WriteProcessMemory(hTargetProcess, funcOriginal, apientry, 5, NULL);
-	VirtualProtectEx(hTargetProcess, funcOriginal, 5, protectOriginal, &protectOriginal);
-	CloseHandle(hTargetProcess);
+	if (MH_DisableHook(&midiOutOpen) != MH_OK)
+		return FALSE;
+	return TRUE;
+}
+
+BOOL InitHijack()
+{
+	if (MH_Initialize() != MH_OK)
+		return FALSE;
+	if (MH_CreateHook(&midiOutOpen, &Redirect_midiOutOpen, reinterpret_cast<void**>(&funcOriginal)) != MH_OK)
+		return FALSE;
+	return TRUE;
+}
+
+BOOL UninitHijack()
+{
+	if (MH_Uninitialize() != MH_OK)
+		return FALSE;
+	return TRUE;
 }
 
 BOOL WINAPI DllMain(HINSTANCE hInstDll, DWORD fdwReason, LPVOID lpvReserved)
@@ -144,11 +159,12 @@ BOOL WINAPI DllMain(HINSTANCE hInstDll, DWORD fdwReason, LPVOID lpvReserved)
 	{
 	case DLL_PROCESS_ATTACH:
 		DisableThreadLibraryCalls(hInstDll);
-		hTargetPid = GetCurrentProcessId();
+		InitHijack();
 		StartHijack();
 		break;
 	case DLL_PROCESS_DETACH:
 		StopHijack();
+		UninitHijack();
 		break;
 	case DLL_THREAD_ATTACH:break;
 	case DLL_THREAD_DETACH:break;
@@ -156,7 +172,11 @@ BOOL WINAPI DllMain(HINSTANCE hInstDll, DWORD fdwReason, LPVOID lpvReserved)
 	return TRUE;
 }
 
+#ifdef _WIN64
+#pragma comment(linker,"/Export:MidiHook")
+#else
 #pragma comment(linker,"/Export:MidiHook=_MidiHook@12")
+#endif
 extern "C" LRESULT WINAPI MidiHook(int code, WPARAM w, LPARAM l)
 {
 	return CallNextHookEx(NULL, code, w, l);

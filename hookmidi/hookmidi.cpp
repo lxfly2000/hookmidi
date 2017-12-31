@@ -81,7 +81,7 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPvI, LPWSTR param, int nShow)
 		sefullpath = szfp;
 		se.lpFile = sefullpath.c_str();
 	}
-		break;
+	break;
 	case 1:
 		if (!ChooseExecuteFile(separam))
 			return 0;
@@ -92,12 +92,12 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPvI, LPWSTR param, int nShow)
 		return E_INVALIDARG;
 		break;
 	}
-	ShellExecuteEx(&se);
-	DWORD hTargetPid = GetProcessId(se.hProcess);
 	HMODULE hdll = LoadLibrary(TEXT("hijackmidi"));
 	HOOKPROC fMidiHook = (HOOKPROC)GetProcAddress(hdll, "MidiHook");
 	if (fMidiHook == NULL)
 		MessageBox(NULL, TEXT("没有找到 MidiHook 函数。"), NULL, MB_ICONERROR);
+	ShellExecuteEx(&se);
+	DWORD hTargetPid = GetProcessId(se.hProcess);
 	//貌似不能100%成功？
 	HHOOK hhkMidi = SetWindowsHookEx(WH_DEBUG, fMidiHook, hdll, GetFirstThreadID(hTargetPid));
 	if (hhkMidi == NULL)
@@ -115,8 +115,8 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPvI, LPWSTR param, int nShow)
 		{
 			wsprintf(msg, TEXT("移除Hook时出错：%#x"), e);
 			MessageBox(NULL, msg, NULL, MB_ICONERROR);
+			return e;
 		}
-		return e;
 	}
 
 	return 0;
