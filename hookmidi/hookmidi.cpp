@@ -2,32 +2,8 @@
 //http://www.freebuf.com/articles/system/94693.html
 #include<vector>
 #include<Windows.h>
-#include<TlHelp32.h>
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
-
-DWORD GetFirstThreadID(DWORD pid)
-{
-	HANDLE h = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-	if (h == INVALID_HANDLE_VALUE)
-		return 0;
-	THREADENTRY32 te;
-	te.dwSize = sizeof(te);
-	for (BOOL tfound = Thread32First(h, &te); tfound; tfound = Thread32Next(h, &te))
-	{
-		if (te.dwSize >= FIELD_OFFSET(THREADENTRY32, th32OwnerProcessID) + sizeof(te.th32OwnerProcessID))
-		{
-			if (te.th32OwnerProcessID == pid)
-			{
-				HANDLE hThread = OpenThread(READ_CONTROL, FALSE, te.th32ThreadID);
-				if (hThread)
-					return te.th32ThreadID;
-			}
-		}
-	}
-	CloseHandle(h);
-	return 0;
-}
 
 bool ChooseExecuteFile(std::wstring &path)
 {
@@ -98,16 +74,17 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPvI, LPWSTR param, int nShow)
 	HOOKPROC fMidiHook = (HOOKPROC)GetProcAddress(hdll, "MidiHook");
 	if (fMidiHook == NULL)
 		MessageBox(NULL, TEXT("没有找到 MidiHook 函数。"), NULL, MB_ICONERROR);
-	ShellExecuteEx(&se);
-	DWORD hTargetPid = GetProcessId(se.hProcess);
-	//貌似不能100%成功？
-	HHOOK hhkMidi = SetWindowsHookEx(WH_DEBUG, fMidiHook, hdll, GetFirstThreadID(hTargetPid));
+	//个人推测WH_DEBUG开销最大而WH_SHELL开销最小
+	//实际上这样改过后就不需要监视目标进程了，因为钩子是全局的
+	//顺序上只要保证钩子在目标程序前启动就行了
+	HHOOK hhkMidi = SetWindowsHookEx(WH_SHELL, fMidiHook, hdll, 0);
 	if (hhkMidi == NULL)
 	{
 		TCHAR msg[40];
 		wsprintf(msg, TEXT("无法设置Hook：%#x\n请尝试重新启动。"), GetLastError());
 		MessageBox(NULL, msg, NULL, MB_ICONERROR);
 	}
+	ShellExecuteEx(&se);
 	WaitForSingleObject(se.hProcess, INFINITE);
 	if (!UnhookWindowsHookEx(hhkMidi))
 	{
