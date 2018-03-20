@@ -143,7 +143,7 @@ BOOL SetHookFunction(LPCTSTR funcname)
 	return SetDlgItemText(hDlg, IDC_EDIT_HOOKFUNC, funcname);
 }
 
-LRESULT WINAPI DialogCallback(HWND h, UINT m, WPARAM w, LPARAM l)
+INT_PTR WINAPI DialogCallback(HWND h, UINT m, WPARAM w, LPARAM l)
 {
 	switch (m)
 	{
