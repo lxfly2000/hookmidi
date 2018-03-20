@@ -1,92 +1,54 @@
+#define HOOKMIDI
+#define MAX_FUNCNAME 256
+#define APP_IDENTIFIER "Hook"
+#define PROFILE_NAME ".\\hook.ini"
+#define KEY_HOOK_FILE "file"
+#define KEY_HOOK_FUNC "function"
+#define DEFAULT_HOOK_FILE "hijackmidi.dll"
+#define DEFAULT_HOOK_FUNC "MidiHook"
 //http://www.freebuf.com/articles/system/93413.html
 //http://www.freebuf.com/articles/system/94693.html
-#include<vector>
 #include<Windows.h>
+#include<windowsx.h>
+#include"resource.h"
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
-bool ChooseExecuteFile(std::wstring &path)
+BOOL ChooseHookFile(HWND hParent, LPTSTR path, int lpath)
 {
-	TCHAR cpath[MAX_PATH] = TEXT(""), cname[MAX_PATH] = TEXT("");
+	TCHAR cname[MAX_PATH] = TEXT("");
 	OPENFILENAME ofn = { 0 };
 	ofn.lStructSize = sizeof OPENFILENAME;
-	ofn.hwndOwner = nullptr;
+	ofn.hwndOwner = hParent;
 	ofn.hInstance = nullptr;
-	ofn.lpstrFilter = TEXT("应用程序\0*.exe;*.com\0所有文件\0*\0\0");
-	ofn.lpstrFile = cpath;
-	ofn.nMaxFile = MAX_PATH;
+	ofn.lpstrFilter = TEXT("动态链接库\0*.dll\0\0");
+	ofn.lpstrFile = path;
+	ofn.nMaxFile = lpath;
 	ofn.lpstrFileTitle = cname;
-	ofn.nMaxFileTitle = MAX_PATH;
-	ofn.Flags = OFN_HIDEREADONLY;
-	if (GetOpenFileName(&ofn))
-	{
-		path = cpath;
-		return true;
-	}
-	return false;
+	ofn.nMaxFileTitle = ARRAYSIZE(cname);
+	ofn.Flags = OFN_HIDEREADONLY | OFN_FILEMUSTEXIST;
+	return GetOpenFileName(&ofn);
 }
 
-int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPvI, LPWSTR param, int nShow)
+LPCTSTR GetFileName(LPCTSTR path)
 {
-	SHELLEXECUTEINFO se = { 0 };
-	se.cbSize = sizeof se;
-	se.hwnd = NULL;
-	se.lpVerb = TEXT("open");
-	se.lpFile = NULL;
-	se.lpParameters = NULL;
-	se.fMask = SEE_MASK_NOCLOSEPROCESS;
-	se.nShow = SW_SHOW;
-	TCHAR szcd[MAX_PATH];
-	GetCurrentDirectory(ARRAYSIZE(szcd), szcd);
-	se.lpDirectory = szcd;
+	LPCTSTR p = wcsrchr(path, '\\');
+	if (!p)
+		p = wcsrchr(path, '/');
+	if (!p)
+		return path;
+	return p + 1;
+}
 
-	std::wstring separam, sefullpath;
-	switch (__argc)
-	{
-	default:
-	case 3:
-		for (int i = 2; i < __argc; i++)
-		{
-			if (i > 2)
-				separam += TEXT(" ");
-			separam += __wargv[i];
-		}
-		se.lpParameters = separam.c_str();
-	case 2:
-	{
-		TCHAR szfp[MAX_PATH];
-		GetFullPathName(__wargv[1], ARRAYSIZE(szfp), szfp, NULL);
-		sefullpath = szfp;
-		se.lpFile = sefullpath.c_str();
-	}
-	break;
-	case 1:
-		if (!ChooseExecuteFile(separam))
-			return 0;
-		GetCurrentDirectory(ARRAYSIZE(szcd), szcd);
-		se.lpFile = separam.c_str();
-		break;
-	case 0:
-		return E_INVALIDARG;
-		break;
-	}
-	HMODULE hdll = LoadLibrary(TEXT("hijackmidi"));
-	HOOKPROC fMidiHook = (HOOKPROC)GetProcAddress(hdll, "MidiHook");
-	if (fMidiHook == NULL)
-		MessageBox(NULL, TEXT("没有找到 MidiHook 函数。"), NULL, MB_ICONERROR);
-	//个人推测WH_DEBUG开销最大而WH_SHELL开销最小
-	//实际上这样改过后就不需要监视目标进程了，因为钩子是全局的
-	//顺序上只要保证钩子在目标程序前启动就行了
-	HHOOK hhkMidi = SetWindowsHookEx(WH_SHELL, fMidiHook, hdll, 0);
-	if (hhkMidi == NULL)
-	{
-		TCHAR msg[40];
-		wsprintf(msg, TEXT("无法设置Hook：%#x\n请尝试重新启动。"), GetLastError());
-		MessageBox(NULL, msg, NULL, MB_ICONERROR);
-	}
-	ShellExecuteEx(&se);
-	WaitForSingleObject(se.hProcess, INFINITE);
-	if (!UnhookWindowsHookEx(hhkMidi))
+HHOOK hHook = NULL;
+HMODULE hDll = NULL;
+HWND hDlg = NULL;
+
+void StopHook()
+{
+	if (hHook == NULL)
+		return;
+	if (!UnhookWindowsHookEx(hHook))
 	{
 		TCHAR msg[40];
 		DWORD e = GetLastError();
@@ -94,9 +56,149 @@ int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPvI, LPWSTR param, int nShow)
 		{
 			wsprintf(msg, TEXT("移除Hook时出错：%#x"), e);
 			MessageBox(NULL, msg, NULL, MB_ICONERROR);
-			return e;
+			return;
 		}
 	}
+	hHook = NULL;
+	if (hDll)
+	{
+		if (!FreeLibrary(hDll))
+		{
+			MessageBox(hDlg, TEXT("释放 DLL 时出错。"), NULL, MB_ICONERROR);
+			return;
+		}
+		hDll = NULL;
+	}
+	SetWindowText(hDlg, TEXT("Hook 已停止"));
+	SetDlgItemText(hDlg, IDOK, TEXT("启动"));
+}
 
+void StartHook()
+{
+	if (hHook)
+	{
+		MessageBox(hDlg, TEXT("Hook 已经启动。"), NULL, MB_ICONINFORMATION);
+		return;
+	}
+	TCHAR dllfile[MAX_PATH];
+	char funcname[MAX_FUNCNAME];
+	GetDlgItemText(hDlg, IDC_EDIT_HOOKFILE, dllfile, ARRAYSIZE(dllfile));
+	GetDlgItemTextA(hDlg, IDC_EDIT_HOOKFUNC, funcname, ARRAYSIZE(funcname));
+	if (!hDll)
+	{
+		hDll = LoadLibrary(dllfile);
+		if (!hDll)
+		{
+			StopHook();
+			MessageBox(hDlg, TEXT("无法加载 DLL 文件。"), NULL, MB_ICONERROR);
+			return;
+		}
+	}
+	HOOKPROC fHookCallback = (HOOKPROC)GetProcAddress(hDll, funcname);
+	if (!fHookCallback)
+	{
+		StopHook();
+		MessageBox(hDlg, TEXT("找不到指定的函数名。"), NULL, MB_ICONERROR);
+		return;
+	}
+	//个人推测WH_DEBUG开销最大而WH_SHELL开销最小
+	//实际上这样改过后就不需要监视目标进程了，因为钩子是全局的
+	//顺序上只要保证钩子在目标程序前启动就行了
+	hHook = SetWindowsHookEx(WH_SHELL, fHookCallback, hDll, 0);
+	if (hHook == NULL)
+	{
+		StopHook();
+		TCHAR msg[40];
+		wsprintf(msg, TEXT("无法设置Hook：%#x\n请尝试重新启动。"), GetLastError());
+		MessageBox(hDlg, msg, NULL, MB_ICONERROR);
+		return;
+	}
+	TCHAR title[300];
+	wsprintf(title, TEXT("Hook 已启动：%s"), GetFileName(dllfile));
+	SetWindowText(hDlg, title);
+	SetDlgItemText(hDlg, IDOK, TEXT("停止"));
+}
+
+void ToggleHook()
+{
+	if (hHook == NULL)
+		StartHook();
+	else
+		StopHook();
+}
+
+BOOL SetHookFile(LPCTSTR path)
+{
+#ifndef HOOKMIDI
+	WritePrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FILE), path, TEXT(PROFILE_NAME));
+#endif
+	return SetDlgItemText(hDlg, IDC_EDIT_HOOKFILE, path);
+}
+
+BOOL SetHookFunction(LPCTSTR funcname)
+{
+#ifndef HOOKMIDI
+	WritePrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FUNC), funcname, TEXT(PROFILE_NAME));
+#endif
+	return SetDlgItemText(hDlg, IDC_EDIT_HOOKFUNC, funcname);
+}
+
+LRESULT WINAPI DialogCallback(HWND h, UINT m, WPARAM w, LPARAM l)
+{
+	switch (m)
+	{
+	case WM_INITDIALOG:
+		hDlg = h;
+		Edit_LimitText(GetDlgItem(h, IDC_EDIT_HOOKFILE), MAX_PATH);
+		Edit_LimitText(GetDlgItem(h, IDC_EDIT_HOOKFUNC), MAX_FUNCNAME);
+		StopHook();
+		switch (__argc)
+		{
+		case 3:
+			SetHookFunction(__wargv[2]);
+		case 2:
+			SetHookFile(__wargv[1]);
+			break;
+		default:
+		{
+			TCHAR buf[MAX_PATH];
+			GetPrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FILE), TEXT(DEFAULT_HOOK_FILE),
+				buf, ARRAYSIZE(buf), TEXT(PROFILE_NAME));
+			SetHookFile(buf);
+			GetPrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FUNC), TEXT(DEFAULT_HOOK_FUNC),
+				buf, ARRAYSIZE(buf), TEXT(PROFILE_NAME));
+			SetHookFunction(buf);
+		}
+			break;
+		}
+		if (__argc > 2)
+			StartHook();
+		break;
+	case WM_COMMAND:
+		switch (LOWORD(w))
+		{
+		case IDOK:
+			ToggleHook();
+			break;
+		case IDCANCEL:
+			StopHook();
+			EndDialog(h, 0);
+			break;
+		case IDC_BUTTON_BROWSE:
+		{
+			TCHAR path[MAX_PATH];
+			GetDlgItemText(h, IDC_EDIT_HOOKFILE, path, MAX_PATH);
+			if (ChooseHookFile(h, path, MAX_PATH))
+				SetHookFile(path);
+		}
+			break;
+		}
+		break;
+	}
 	return 0;
+}
+
+int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPvI, LPWSTR param, int nShow)
+{
+	return (int)DialogBox(hI, MAKEINTRESOURCE(IDD_DIALOG_MAIN), NULL, DialogCallback);
 }

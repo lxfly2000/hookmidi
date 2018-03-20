@@ -5,12 +5,12 @@
 Windows Vista 及以后的操作系统，32位或64位均可。需要安装 [Visual C++ 2017 运行库](https://www.visualstudio.com/zh-hans/downloads)。
 
 ## 使用方法
-`hookmidi <程序路径> <参数>`  
-如果没有指定路径，程序将会弹出一个选择程序文件的对话框。
+选择Hook文件，点击启动；  
+或使用命令行：`hookmidi <DLL路径> <Hook回调函数名>`
 
 ### 注意
-* 部分较早版本RPGMaker制作的游戏程序实际路径在start.exe所在目录下的一个子目录中（比如game或data中），对于这种程序不应该使用start.exe，而应该使用game\RPG_RT.exe、data\RPG_RT.exe等类似的路径并附带上程序启动的参数，否则hookmidi会拦截不到实际运行的程序。
-* 如果提示无法设置Hook请尝试重新启动。
+* 不要强制关闭程序，否则系统会因钩子未释放而引发错误，此时你需要重启系统使功能恢复正常。
+* 如果提示无法设置Hook请尝试重新启动程序。
 
 ## 使用的第三方库
 * [MinHook](https://github.com/TsudaKageyu/minhook)
