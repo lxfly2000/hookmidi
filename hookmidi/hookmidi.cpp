@@ -1,11 +1,16 @@
-#define HOOKMIDI
+//#define HOOKMIDI
 #define MAX_FUNCNAME 256
 #define APP_IDENTIFIER "Hook"
 #define PROFILE_NAME ".\\hook.ini"
 #define KEY_HOOK_FILE "file"
 #define KEY_HOOK_FUNC "function"
+#ifdef HOOKMIDI
 #define DEFAULT_HOOK_FILE "hijackmidi.dll"
 #define DEFAULT_HOOK_FUNC "MidiHook"
+#else
+#define DEFAULT_HOOK_FILE "hook.dll"
+#define DEFAULT_HOOK_FUNC "HookCallback"
+#endif
 //http://www.freebuf.com/articles/system/93413.html
 //http://www.freebuf.com/articles/system/94693.html
 #include<Windows.h>
@@ -117,6 +122,10 @@ void StartHook()
 	wsprintf(title, TEXT("Hook ÒÑÆô¶¯£º%s"), GetFileName(dllfile));
 	SetWindowText(hDlg, title);
 	SetDlgItemText(hDlg, IDOK, TEXT("Í£Ö¹"));
+#ifndef HOOKMIDI
+	WritePrivateProfileStringA(APP_IDENTIFIER, KEY_HOOK_FUNC, funcname, PROFILE_NAME);
+	WritePrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FILE), dllfile, TEXT(PROFILE_NAME));
+#endif
 }
 
 void ToggleHook()
@@ -129,17 +138,11 @@ void ToggleHook()
 
 BOOL SetHookFile(LPCTSTR path)
 {
-#ifndef HOOKMIDI
-	WritePrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FILE), path, TEXT(PROFILE_NAME));
-#endif
 	return SetDlgItemText(hDlg, IDC_EDIT_HOOKFILE, path);
 }
 
 BOOL SetHookFunction(LPCTSTR funcname)
 {
-#ifndef HOOKMIDI
-	WritePrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FUNC), funcname, TEXT(PROFILE_NAME));
-#endif
 	return SetDlgItemText(hDlg, IDC_EDIT_HOOKFUNC, funcname);
 }
 
@@ -149,17 +152,8 @@ INT_PTR WINAPI DialogCallback(HWND h, UINT m, WPARAM w, LPARAM l)
 	{
 	case WM_INITDIALOG:
 		hDlg = h;
-		Edit_LimitText(GetDlgItem(h, IDC_EDIT_HOOKFILE), MAX_PATH);
-		Edit_LimitText(GetDlgItem(h, IDC_EDIT_HOOKFUNC), MAX_FUNCNAME);
-		StopHook();
-		switch (__argc)
-		{
-		case 3:
-			SetHookFunction(__wargv[2]);
-		case 2:
-			SetHookFile(__wargv[1]);
-			break;
-		default:
+		Edit_LimitText(GetDlgItem(h, IDC_EDIT_HOOKFILE), MAX_PATH-1);
+		Edit_LimitText(GetDlgItem(h, IDC_EDIT_HOOKFUNC), MAX_FUNCNAME-1);
 		{
 			TCHAR buf[MAX_PATH];
 			GetPrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FILE), TEXT(DEFAULT_HOOK_FILE),
@@ -169,6 +163,13 @@ INT_PTR WINAPI DialogCallback(HWND h, UINT m, WPARAM w, LPARAM l)
 				buf, ARRAYSIZE(buf), TEXT(PROFILE_NAME));
 			SetHookFunction(buf);
 		}
+		StopHook();
+		switch (__argc)
+		{
+		case 3:
+			SetHookFunction(__wargv[2]);
+		case 2:
+			SetHookFile(__wargv[1]);
 			break;
 		}
 		if (__argc > 2)
