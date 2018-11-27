@@ -1,25 +1,11 @@
 #include<vector>
 #include<Windows.h>
 #include<CommCtrl.h>
-#include"include\MinHook.h"
+#include"minhook\include\MinHook.h"
 #pragma comment(lib,"winmm.lib")
 #pragma comment(lib,"ComCtl32.lib")
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
-
-#ifdef _WIN64
-#ifdef _DEBUG
-#pragma comment(lib,"lib\\libMinHook-x64-v141-mdd.lib")
-#else
-#pragma comment(lib,"lib\\libMinHook-x64-v141-md.lib")
-#endif
-#else
-#ifdef _DEBUG
-#pragma comment(lib,"lib\\libMinHook-x86-v141-mdd.lib")
-#else
-#pragma comment(lib,"lib\\libMinHook-x86-v141-md.lib")
-#endif
-#endif
 
 #define APP_NAME "hijackmidi"
 #define INI_FILE ".\\hijackmidi.ini"
