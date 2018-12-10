@@ -1,14 +1,11 @@
+#include"ChooseList.h"
 #include<vector>
 #include<Windows.h>
-#include<CommCtrl.h>
 #include"minhook\include\MinHook.h"
 #pragma comment(lib,"winmm.lib")
-#pragma comment(lib,"ComCtl32.lib")
-#pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
-processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
-#define APP_NAME "hijackmidi"
-#define INI_FILE ".\\hijackmidi.ini"
+#define APP_NAME "midihook"
+#define INI_FILE ".\\midihook.ini"
 #define KEY_REMEMBER "remember"
 #define KEY_DEVICE_ID "deviceId"
 
@@ -40,56 +37,41 @@ UINT ChooseMidiOutDevice(UINT defaultID)
 {
 	if (GetRemember())
 		return GetRememberDeviceID();
-	UINT selID = defaultID;
 	MIDIOUTCAPS moc;
-	TCHAR msg[64];
-	TASKDIALOGCONFIG tc = { 0 };
-	std::vector<TASKDIALOG_BUTTON> tb;
-	tc.cbSize = sizeof tc;
-	tc.dwCommonButtons = TDCBF_CANCEL_BUTTON;
-	tc.hInstance = NULL;
-	tc.pszContent = msg;
-	tc.pszMainInstruction = TEXT("选择MIDI输出设备");
-	tc.pszMainIcon = TD_INFORMATION_ICON;
-	tc.dwFlags = TDF_USE_COMMAND_LINKS;
-	tc.pszVerificationText = TEXT("下次不再提示(&R)");
-
 	UINT midiOutCount = midiOutGetNumDevs();
 	midiOutGetDevCaps(defaultID, &moc, sizeof moc);
-	wsprintf(msg, TEXT("程序指定的设备为：\n[%d]%s"), defaultID, moc.szPname);
 	std::vector<std::wstring> descptr(midiOutCount + 1);
 	for (int i = -1; i < (int)midiOutCount; i++)
 	{
 		midiOutGetDevCaps(i, &moc, sizeof moc);
-		TCHAR devdesc[60];
-		wsprintf(devdesc, TEXT("[&%d]%s"), i, moc.szPname);
+		TCHAR devdesc[128]=TEXT(""),appendText[32]=TEXT("");
+		wsprintf(devdesc, TEXT("[%d]%s"), i, moc.szPname);
 		if ((UINT)i == MIDI_MAPPER)
-			lstrcat(devdesc, TEXT("\nMIDI 映射器"));
+			lstrcat(appendText, TEXT("MIDI 映射器"));
 		if ((UINT)i == defaultID)
 		{
 			if (defaultID == MIDI_MAPPER)
-				lstrcat(devdesc, TEXT("，"));
-			else
-				lstrcat(devdesc, TEXT("\n"));
-			lstrcat(devdesc, TEXT("程序指定的设备"));
+				lstrcat(appendText, TEXT("，"));
+			lstrcat(appendText, TEXT("程序指定的设备"));
+		}
+		if (lstrlen(appendText) > 0)
+		{
+			lstrcat(devdesc, TEXT("（"));
+			lstrcat(devdesc, appendText);
+			lstrcat(devdesc, TEXT("）"));
 		}
 		descptr[i + 1] = devdesc;
-		tb.push_back({ 1000 + i,descptr[i + 1].c_str() });
 	}
-	tc.pButtons = tb.data();
-	tc.cButtons = (UINT)tb.size();
 
 	BOOL bRem = FALSE;
-	TaskDialogIndirect(&tc, reinterpret_cast<int*>(&selID), NULL, &bRem);
-	if (selID >= 999)
+	std::vector<LPCTSTR> ptrs;
+	for (std::wstring&str : descptr)
+		ptrs.push_back(str.c_str());
+	defaultID = ChooseList(NULL, TEXT("选择MIDI输出设备"), ptrs.data(), midiOutCount + 1, defaultID + 1, TEXT("下次不再提示(&R)"), &bRem) - 1;
+	if (bRem)
 	{
-		selID -= 1000;
-		if (bRem)
-		{
-			SetRemember(TRUE);
-			SetRememberDeviceID(selID);
-		}
-		return selID;
+		SetRemember(TRUE);
+		SetRememberDeviceID(defaultID);
 	}
 	return defaultID;
 }
