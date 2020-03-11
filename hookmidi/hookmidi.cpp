@@ -1,7 +1,6 @@
 //#define HOOKMIDI
 #define MAX_FUNCNAME 256
 #define APP_IDENTIFIER "Hook"
-#define PROFILE_NAME ".\\hook.ini"
 #define KEY_HOOK_FILE "file"
 #define KEY_HOOK_FUNC "function"
 #define KEY_HOOK_TYPE "type"
@@ -21,6 +20,32 @@
 #include"resource.h"
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
+WCHAR _profileNameW[MAX_PATH];
+char _profileNameA[MAX_PATH];
+LPCWSTR GetProfileNameW()
+{
+	if (!GetModuleFileNameW(GetModuleHandleW(NULL), _profileNameW, ARRAYSIZE(_profileNameW) - 1))
+		return NULL;
+	LPWSTR pdot = wcsrchr(_profileNameW, '.');
+	if (pdot)
+		wcscpy_s(pdot, 5, L".ini");
+	return _profileNameW;
+}
+LPCSTR GetProfileNameA()
+{
+	if (!GetModuleFileNameA(GetModuleHandleA(NULL), _profileNameA, ARRAYSIZE(_profileNameA) - 1))
+		return NULL;
+	LPSTR pdot = strrchr(_profileNameA, '.');
+	if (pdot)
+		strcpy_s(pdot, 5, ".ini");
+	return _profileNameA;
+}
+#ifdef _UNICODE
+#define GetProfileName GetProfileNameW
+#else
+#define GetProfileName GetProfileNameA
+#endif
 
 typedef struct tagHookTypeItem
 {
@@ -165,11 +190,11 @@ void StartHook()
 	SetWindowText(hDlg, title);
 	SetDlgItemText(hDlg, IDOK, TEXT("ֹͣ"));
 #ifndef HOOKMIDI
-	WritePrivateProfileStringA(APP_IDENTIFIER, KEY_HOOK_FUNC, funcname, PROFILE_NAME);
-	WritePrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FILE), dllfile, TEXT(PROFILE_NAME));
+	WritePrivateProfileStringA(APP_IDENTIFIER, KEY_HOOK_FUNC, funcname, GetProfileNameA());
+	WritePrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FILE), dllfile, GetProfileName());
 	TCHAR *const typeStr = title;
 	wsprintf(typeStr, TEXT("%d"), chosenType);
-	WritePrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_TYPE), typeStr, TEXT(PROFILE_NAME));
+	WritePrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_TYPE), typeStr, GetProfileName());
 #endif
 }
 
@@ -206,12 +231,12 @@ void DialogInit(HWND h)
 
 	TCHAR buf[MAX_PATH];
 	GetPrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FILE), TEXT(DEFAULT_HOOK_FILE),
-		buf, ARRAYSIZE(buf), TEXT(PROFILE_NAME));
+		buf, ARRAYSIZE(buf), GetProfileName());
 	SetHookFile(buf);
 	GetPrivateProfileString(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_FUNC), TEXT(DEFAULT_HOOK_FUNC),
-		buf, ARRAYSIZE(buf), TEXT(PROFILE_NAME));
+		buf, ARRAYSIZE(buf), GetProfileName());
 	SetHookFunction(buf);
-	SetHookType(GetPrivateProfileInt(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_TYPE), DEFAULT_HOOK_TYPE, TEXT(PROFILE_NAME)));
+	SetHookType(GetPrivateProfileInt(TEXT(APP_IDENTIFIER), TEXT(KEY_HOOK_TYPE), DEFAULT_HOOK_TYPE, GetProfileName()));
 
 	StopHook();
 	switch (__argc)
