@@ -154,9 +154,11 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="GetExportTable.cpp" />
     <ClCompile Include="hookmidi.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="GetExportTable.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>

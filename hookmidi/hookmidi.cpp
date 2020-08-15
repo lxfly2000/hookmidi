@@ -18,6 +18,7 @@
 //http://www.freebuf.com/articles/system/94693.html
 #include<windowsx.h>
 #include"resource.h"
+#include"GetExportTable.h"
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
@@ -154,7 +155,7 @@ void StartHook()
 		if (MessageBox(hDlg, TEXT("你选择的文件并不是 DLL 文件，确定继续？"), GetFileName(dllfile), MB_ICONWARNING | MB_OKCANCEL) != IDOK)
 			return;
 	}
-	GetDlgItemTextA(hDlg, IDC_EDIT_HOOKFUNC, funcname, ARRAYSIZE(funcname));
+	GetDlgItemTextA(hDlg, IDC_COMBO_HOOKFUNC, funcname, ARRAYSIZE(funcname));
 	if (!hDll)
 	{
 		hDll = LoadLibrary(dllfile);
@@ -213,7 +214,7 @@ BOOL SetHookFile(LPCTSTR path)
 
 BOOL SetHookFunction(LPCTSTR funcname)
 {
-	return SetDlgItemText(hDlg, IDC_EDIT_HOOKFUNC, funcname);
+	return SetDlgItemText(hDlg, IDC_COMBO_HOOKFUNC, funcname);
 }
 
 int SetHookType(int type)
@@ -225,7 +226,7 @@ void DialogInit(HWND h)
 {
 	hDlg = h;
 	Edit_LimitText(GetDlgItem(h, IDC_EDIT_HOOKFILE), MAX_PATH - 1);
-	Edit_LimitText(GetDlgItem(h, IDC_EDIT_HOOKFUNC), MAX_FUNCNAME - 1);
+	ComboBox_LimitText(GetDlgItem(h, IDC_COMBO_HOOKFUNC), MAX_FUNCNAME - 1);
 	for (auto &e : hookTypes)
 		ComboBox_AddString(GetDlgItem(h, IDC_COMBO_HOOKTYPE), e.descriptionText);
 
@@ -278,6 +279,30 @@ INT_PTR WINAPI DialogCallback(HWND h, UINT m, WPARAM w, LPARAM l)
 				SetHookFile(path);
 		}
 			break;
+		case IDC_EDIT_HOOKFILE:
+			if (HIWORD(w) == EN_CHANGE)
+			{
+				HWND hctl = GetDlgItem(h, IDC_COMBO_HOOKFUNC);
+				int curSel = ComboBox_GetCurSel(hctl);
+				while (ComboBox_GetCount(hctl))
+					ComboBox_DeleteString(hctl, 0);
+				char path[MAX_PATH]{};
+				GetDlgItemTextA(h, IDC_EDIT_HOOKFILE, path, ARRAYSIZE(path) - 1);
+				auto funclist = GetExportTable(path);
+				for (size_t i = 0; i < funclist.size(); i++)
+				{
+#ifdef _UNICODE
+					TCHAR fn[256]{};
+					MultiByteToWideChar(CP_ACP, 0, funclist[i].c_str(), (int)funclist[i].size(), fn, ARRAYSIZE(fn) - 1);
+					ComboBox_AddString(hctl, fn);
+#else
+					ComboBox_AddString(hctl, funclist[i].c_str());
+#endif
+					if (i == 0 && (curSel != CB_ERR || ComboBox_GetTextLength(hctl) == 0))
+						ComboBox_SetCurSel(hctl, 0);
+				}
+			}
+			break;
 		}
 		break;
 	case WM_DROPFILES:
@@ -292,7 +317,7 @@ INT_PTR WINAPI DialogCallback(HWND h, UINT m, WPARAM w, LPARAM l)
 	return 0;
 }
 
-int WINAPI wWinMain(HINSTANCE hI, HINSTANCE hPvI, LPWSTR param, int nShow)
+int WINAPI wWinMain(_In_ HINSTANCE hI, _In_opt_ HINSTANCE hPvI, _In_ LPWSTR param, _In_ int nShow)
 {
 	return (int)DialogBox(hI, MAKEINTRESOURCE(IDD_DIALOG_MAIN), NULL, DialogCallback);
 }
